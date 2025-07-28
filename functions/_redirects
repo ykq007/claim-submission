@@ -1,0 +1,6 @@
+# Cloudflare Pages Redirects Configuration
+# SPA Routing - Redirect all non-file requests to index.html
+/*    /index.html   200
+
+# Optional: Redirect old API endpoints
+# /api/old-endpoint  /api/new-endpoint  301

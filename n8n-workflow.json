@@ -1,0 +1,199 @@
+{
+  "name": "Claim Document Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-claim-document",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.contentType }}",
+              "rightValue": "application/pdf",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "document-type-switch",
+      "name": "Document Type Switch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gemini-1.5-flash",
+        "prompt": "=You are an expert document analyst specializing in insurance claim processing. Analyze the uploaded {{ $json.documentType === 'pdf' ? 'PDF document' : 'image' }} and extract relevant claim information.\n\n**CRITICAL INSTRUCTIONS:**\n1. Extract ALL visible text using OCR capabilities\n2. Identify and extract structured claim data\n3. Provide confidence scores (0-1) for each extracted field\n4. Return data in the specified JSON format\n5. If information is unclear or missing, use null values\n\n**DOCUMENT CONTEXT:**\nThis is an insurance claim document that may contain:\n- Personal information (name, ID, contact details)\n- Incident details (date, description, location)\n- Financial information (claim amounts, policy numbers)\n- Medical information (if applicable)\n- Vehicle information (if applicable)\n- Supporting documentation details\n\n**EXPECTED DATA STRUCTURE:**\nReturn ONLY a valid JSON object with this exact structure:\n```json\n{\n  \"claimNumber\": \"string or null\",\n  \"claimantName\": \"string or null\",\n  \"claimantId\": \"string or null\",\n  \"dateOfIncident\": \"YYYY-MM-DD or null\",\n  \"incidentDescription\": \"string or null\",\n  \"claimAmount\": \"number or null\",\n  \"currency\": \"string or null\",\n  \"policyNumber\": \"string or null\",\n  \"contactInfo\": {\n    \"email\": \"string or null\",\n    \"phone\": \"string or null\",\n    \"address\": \"string or null\"\n  },\n  \"medicalInfo\": {\n    \"doctorName\": \"string or null\",\n    \"hospitalName\": \"string or null\",\n    \"diagnosis\": \"string or null\",\n    \"treatmentDate\": \"YYYY-MM-DD or null\"\n  },\n  \"vehicleInfo\": {\n    \"make\": \"string or null\",\n    \"model\": \"string or null\",\n    \"year\": \"number or null\",\n    \"licensePlate\": \"string or null\",\n    \"damageDescription\": \"string or null\"\n  },\n  \"additionalDetails\": {},\n  \"confidence\": 0.95\n}\n```\n\n**EXTRACTION GUIDELINES:**\n- Look for claim numbers in formats like: CLM-123456, CLAIM#789, etc.\n- Extract dates in various formats and convert to YYYY-MM-DD\n- Identify monetary amounts and their currencies\n- Find policy numbers (often alphanumeric)\n- Extract all contact information (emails, phones, addresses)\n- For medical claims: look for doctor/hospital names, diagnoses, treatment dates\n- For vehicle claims: extract make, model, year, license plate, damage descriptions\n- Calculate overall confidence based on clarity and completeness of extraction\n\n**CONFIDENCE SCORING:**\n- 0.9-1.0: Very clear, high-quality document with most fields extractable\n- 0.7-0.89: Good quality with some fields clearly extractable\n- 0.5-0.69: Moderate quality, some fields may be unclear\n- 0.3-0.49: Poor quality, limited extractable information\n- 0.0-0.29: Very poor quality, minimal extractable information\n\nAnalyze the document thoroughly and return only the JSON response.",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 2048
+        }
+      },
+      "id": "gemini-analysis",
+      "name": "Gemini Document Analysis",
+      "type": "n8n-nodes-base.googleGemini",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and validate Gemini response\ntry {\n  const geminiResponse = $input.first().json.response;\n  \n  // Try to extract JSON from the response\n  let extractedData;\n  \n  if (typeof geminiResponse === 'string') {\n    // Remove any markdown code blocks or extra text\n    const jsonMatch = geminiResponse.match(/```json\\s*([\\s\\S]*?)\\s*```/) || \n                     geminiResponse.match(/\\{[\\s\\S]*\\}/);\n    \n    if (jsonMatch) {\n      extractedData = JSON.parse(jsonMatch[1] || jsonMatch[0]);\n    } else {\n      throw new Error('No valid JSON found in response');\n    }\n  } else {\n    extractedData = geminiResponse;\n  }\n  \n  // Validate required structure\n  const validatedData = {\n    claimNumber: extractedData.claimNumber || null,\n    claimantName: extractedData.claimantName || null,\n    claimantId: extractedData.claimantId || null,\n    dateOfIncident: extractedData.dateOfIncident || null,\n    incidentDescription: extractedData.incidentDescription || null,\n    claimAmount: extractedData.claimAmount ? Number(extractedData.claimAmount) : null,\n    currency: extractedData.currency || null,\n    policyNumber: extractedData.policyNumber || null,\n    contactInfo: {\n      email: extractedData.contactInfo?.email || null,\n      phone: extractedData.contactInfo?.phone || null,\n      address: extractedData.contactInfo?.address || null\n    },\n    medicalInfo: {\n      doctorName: extractedData.medicalInfo?.doctorName || null,\n      hospitalName: extractedData.medicalInfo?.hospitalName || null,\n      diagnosis: extractedData.medicalInfo?.diagnosis || null,\n      treatmentDate: extractedData.medicalInfo?.treatmentDate || null\n    },\n    vehicleInfo: {\n      make: extractedData.vehicleInfo?.make || null,\n      model: extractedData.vehicleInfo?.model || null,\n      year: extractedData.vehicleInfo?.year ? Number(extractedData.vehicleInfo.year) : null,\n      licensePlate: extractedData.vehicleInfo?.licensePlate || null,\n      damageDescription: extractedData.vehicleInfo?.damageDescription || null\n    },\n    additionalDetails: extractedData.additionalDetails || {},\n    confidence: extractedData.confidence || 0.5\n  };\n  \n  return {\n    success: true,\n    extractedData: validatedData,\n    confidence: validatedData.confidence,\n    processedAt: new Date().toISOString(),\n    documentId: $('Webhook Trigger').first().json.body.documentId\n  };\n  \n} catch (error) {\n  return {\n    success: false,\n    error: `Data processing failed: ${error.message}`,\n    processedAt: new Date().toISOString(),\n    documentId: $('Webhook Trigger').first().json.body.documentId\n  };\n}"
+      },
+      "id": "data-processor",
+      "name": "Data Processor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submit-claim", 
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "claim-submission-webhook",
+      "name": "Claim Submission Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process final claim submission\nconst claimData = $input.first().json.body;\n\n// Generate a unique claim ID\nconst claimId = `CLM-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;\n\n// Structure the final claim submission\nconst finalClaim = {\n  claimId: claimId,\n  submissionDate: new Date().toISOString(),\n  status: 'submitted',\n  documents: claimData.documents || [],\n  extractedData: claimData.extractedData || {},\n  userVerified: claimData.userVerified || false,\n  processingNotes: {\n    submittedVia: 'web-portal',\n    aiProcessed: true,\n    documentsCount: (claimData.documents || []).length,\n    averageConfidence: claimData.extractedData?.confidence || 0\n  }\n};\n\n// Log the submission (in production, this would go to your database/API)\nconsole.log('New claim submitted:', finalClaim);\n\nreturn {\n  success: true,\n  claimId: claimId,\n  message: 'Claim submitted successfully',\n  submittedAt: finalClaim.submissionDate\n};"
+      },
+      "id": "claim-processor",
+      "name": "Claim Processor", 
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "claim-response",
+      "name": "Claim Response",
+      "type": "n8n-nodes-base.respondToWebhook", 
+      "typeVersion": 1,
+      "position": [680, 500]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Document Type Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Type Switch": {
+      "main": [
+        [
+          {
+            "node": "Gemini Document Analysis",
+            "type": "main", 
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini Document Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Document Analysis": {
+      "main": [
+        [
+          {
+            "node": "Data Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Processor": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Submission Webhook": {
+      "main": [
+        [
+          {
+            "node": "Claim Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Processor": {
+      "main": [
+        [
+          {
+            "node": "Claim Response", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 2,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
