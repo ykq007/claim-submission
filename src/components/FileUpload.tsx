@@ -70,13 +70,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         <input {...getInputProps()} />
         <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
         <p className="text-lg font-medium text-gray-900 mb-2">
-          {isDragActive ? 'Drop files here' : 'Upload claim documents'}
+          {isDragActive ? 'Drop receipts here' : 'Upload expense receipts'}
         </p>
         <p className="text-sm text-gray-600 mb-4">
-          Drag and drop files or click to browse
+          Drag and drop receipts or click to browse
         </p>
         <p className="text-xs text-gray-500">
-          Supports PDF, JPG, PNG up to 10MB each
+          Supports PDF, JPG, PNG receipts up to 10MB each
         </p>
       </div>
 

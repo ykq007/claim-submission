@@ -9,32 +9,56 @@ export interface ClaimDocument {
 }
 
 export interface ExtractedData {
-  claimNumber?: string;
-  claimantName?: string;
-  claimantId?: string;
-  dateOfIncident?: string;
-  incidentDescription?: string;
-  claimAmount?: number;
+  // Basic Expense Information
+  receiptNumber?: string;
+  expenseDate?: string;
+  expenseAmount?: number;
   currency?: string;
-  policyNumber?: string;
-  contactInfo?: {
-    email?: string;
-    phone?: string;
-    address?: string;
+  expenseType?: 'meal' | 'transport' | 'accommodation' | 'entertainment' | 'supplies' | 'fuel' | 'other';
+  description?: string;
+  
+  // Vendor/Merchant Information
+  vendorName?: string;
+  vendorAddress?: string;
+  vendorPhone?: string;
+  vendorTaxId?: string;
+  
+  // Employee Information
+  employeeName?: string;
+  employeeId?: string;
+  department?: string;
+  costCenter?: string;
+  
+  // Business Context
+  purpose?: string;
+  clientName?: string;
+  projectCode?: string;
+  isClientReimbursable?: boolean;
+  
+  // Tax Information
+  taxAmount?: number;
+  taxRate?: number;
+  taxType?: string;
+  isTaxDeductible?: boolean;
+  
+  // Travel/Transport Details
+  travelDetails?: {
+    origin?: string;
+    destination?: string;
+    distance?: number;
+    transportMode?: 'car' | 'taxi' | 'train' | 'flight' | 'bus' | 'other';
+    mileageRate?: number;
   };
-  medicalInfo?: {
-    doctorName?: string;
-    hospitalName?: string;
-    diagnosis?: string;
-    treatmentDate?: string;
+  
+  // Meal Details
+  mealDetails?: {
+    attendees?: string[];
+    attendeeCount?: number;
+    mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+    isClientMeal?: boolean;
   };
-  vehicleInfo?: {
-    make?: string;
-    model?: string;
-    year?: number;
-    licensePlate?: string;
-    damageDescription?: string;
-  };
+  
+  // Additional Information
   additionalDetails?: Record<string, any>;
   confidence?: number;
 }

@@ -1,10 +1,10 @@
 import React, { useState, useCallback } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
 import { FileUpload } from './components/FileUpload';
-import { DataReview } from './components/DataReview';
+import { ExpenseDataReview } from './components/ExpenseDataReview';
 import { ClaimDocument, ExtractedData } from './types/claim';
 import { N8nService } from './services/n8nService';
-import { FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { Receipt, CheckCircle, AlertCircle } from 'lucide-react';
 
 function App() {
   const [documents, setDocuments] = useState<ClaimDocument[]>([]);
@@ -135,9 +135,9 @@ function App() {
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="py-6">
-            <h1 className="text-3xl font-bold text-gray-900">Claim Submission System</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Expense Claim System</h1>
             <p className="mt-2 text-sm text-gray-600">
-              Upload your documents and submit your insurance claim
+              Upload your receipts and submit expense claims for reimbursement
             </p>
           </div>
         </div>
@@ -148,9 +148,9 @@ function App() {
         <nav aria-label="Progress">
           <ol className="flex items-center">
             {[
-              { id: 'upload', name: 'Upload Documents', icon: FileText },
+              { id: 'upload', name: 'Upload Receipts', icon: Receipt },
               { id: 'review', name: 'Review & Edit', icon: AlertCircle },
-              { id: 'submitted', name: 'Submit Claim', icon: CheckCircle }
+              { id: 'submitted', name: 'Submit Expense', icon: CheckCircle }
             ].map((step, stepIdx) => {
               const status = getStepStatus(step.id);
               const Icon = step.icon;
@@ -234,7 +234,7 @@ function App() {
         )}
 
         {currentStep === 'review' && extractedData && (
-          <DataReview
+          <ExpenseDataReview
             extractedData={extractedData}
             onDataUpdate={handleDataUpdate}
             onSubmit={handleSubmitClaim}
@@ -245,15 +245,15 @@ function App() {
         {currentStep === 'submitted' && (
           <div className="text-center py-12">
             <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Claim Submitted Successfully!</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Expense Claim Submitted Successfully!</h2>
             <p className="text-gray-600 mb-6">
-              Your claim has been submitted and is now being processed. You will receive updates via email.
+              Your expense claim has been submitted and is now being processed. You will receive updates via email.
             </p>
             <button
               onClick={resetForm}
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
             >
-              Submit Another Claim
+              Submit Another Expense
             </button>
           </div>
         )}
