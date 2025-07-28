@@ -1,0 +1,22 @@
+# Cloudflare Pages Configuration
+name = "claim-submission-app"
+compatibility_date = "2024-01-01"
+
+[build]
+command = "npm run build"
+cwd = "."
+watch_dir = "src"
+
+[[build.upload]]
+format = "service-worker"
+
+[env.production]
+vars = { VITE_ENV = "production" }
+
+[env.preview]
+vars = { VITE_ENV = "preview" }
+
+# Optional: Custom domains
+# [[env.production.routes]]
+# pattern = "claims.yourdomain.com"
+# custom_domain = true

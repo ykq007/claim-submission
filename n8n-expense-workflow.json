@@ -1,0 +1,199 @@
+{
+  "name": "Expense Receipt Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-claim-document",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.contentType }}",
+              "rightValue": "application/pdf",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "document-type-switch",
+      "name": "Document Type Switch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gemini-1.5-flash",
+        "prompt": "=You are an expert expense receipt analyst specializing in sales expense processing. Analyze the uploaded {{ $json.documentType === 'pdf' ? 'receipt document' : 'receipt image' }} and extract relevant expense information for reimbursement.\n\n**CRITICAL INSTRUCTIONS:**\n1. Extract ALL visible text using OCR capabilities\n2. Identify and extract structured expense data from receipts\n3. Provide confidence scores (0-1) for each extracted field\n4. Return data in the specified JSON format\n5. If information is unclear or missing, use null values\n\n**DOCUMENT CONTEXT:**\nThis is a sales expense receipt that may contain:\n- Transaction details (date, amount, receipt number)\n- Vendor/merchant information (name, address, tax ID)\n- Employee information (if present)\n- Tax information (tax amount, rate, type)\n- Expense categorization details\n- Business purpose or context\n\n**EXPECTED DATA STRUCTURE:**\nReturn ONLY a valid JSON object with this exact structure:\n```json\n{\n  \"receiptNumber\": \"string or null\",\n  \"expenseDate\": \"YYYY-MM-DD or null\",\n  \"expenseAmount\": \"number or null\",\n  \"currency\": \"string or null\",\n  \"expenseType\": \"meal|transport|accommodation|entertainment|supplies|fuel|other or null\",\n  \"description\": \"string or null\",\n  \"vendorName\": \"string or null\",\n  \"vendorAddress\": \"string or null\",\n  \"vendorPhone\": \"string or null\",\n  \"vendorTaxId\": \"string or null\",\n  \"employeeName\": \"string or null\",\n  \"employeeId\": \"string or null\",\n  \"department\": \"string or null\",\n  \"costCenter\": \"string or null\",\n  \"purpose\": \"string or null\",\n  \"clientName\": \"string or null\",\n  \"projectCode\": \"string or null\",\n  \"isClientReimbursable\": \"boolean or null\",\n  \"taxAmount\": \"number or null\",\n  \"taxRate\": \"number or null\",\n  \"taxType\": \"string or null\",\n  \"isTaxDeductible\": \"boolean or null\",\n  \"travelDetails\": {\n    \"origin\": \"string or null\",\n    \"destination\": \"string or null\",\n    \"distance\": \"number or null\",\n    \"transportMode\": \"car|taxi|train|flight|bus|other or null\",\n    \"mileageRate\": \"number or null\"\n  },\n  \"mealDetails\": {\n    \"attendees\": [\"string array or null\"],\n    \"attendeeCount\": \"number or null\",\n    \"mealType\": \"breakfast|lunch|dinner|snack or null\",\n    \"isClientMeal\": \"boolean or null\"\n  },\n  \"additionalDetails\": {},\n  \"confidence\": 0.95\n}\n```\n\n**EXTRACTION GUIDELINES:**\n- Look for receipt/invoice numbers in various formats\n- Extract dates in various formats and convert to YYYY-MM-DD\n- Identify total amounts, tax amounts, and currency symbols\n- Find merchant/vendor names and addresses\n- Categorize expenses based on receipt content (restaurant=meal, gas station=fuel, etc.)\n- Extract tax information (VAT, sales tax, etc.)\n- Look for business purpose descriptions or notes\n- Identify travel-related information (routes, distances, transport types)\n- Count meal attendees if listed\n- Calculate overall confidence based on clarity and completeness of extraction\n\n**EXPENSE TYPE CLASSIFICATION:**\n- **meal**: Restaurants, cafes, food delivery, catering\n- **transport**: Taxi, ride-share, public transport, flights, trains\n- **accommodation**: Hotels, motels, Airbnb, lodging\n- **entertainment**: Client entertainment, business events\n- **supplies**: Office supplies, business materials, equipment\n- **fuel**: Gas stations, fuel purchases\n- **other**: Any expense not fitting above categories\n\n**CONFIDENCE SCORING:**\n- 0.9-1.0: Very clear receipt with most fields extractable\n- 0.7-0.89: Good quality receipt with key fields clearly visible\n- 0.5-0.69: Moderate quality, some fields may be unclear\n- 0.3-0.49: Poor quality, limited extractable information\n- 0.0-0.29: Very poor quality, minimal extractable information\n\nAnalyze the receipt thoroughly and return only the JSON response.",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 2048
+        }
+      },
+      "id": "gemini-expense-analysis",
+      "name": "Gemini Expense Analysis",
+      "type": "n8n-nodes-base.googleGemini",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and validate Gemini response for expense data\ntry {\n  const geminiResponse = $input.first().json.response;\n  \n  // Try to extract JSON from the response\n  let extractedData;\n  \n  if (typeof geminiResponse === 'string') {\n    // Remove any markdown code blocks or extra text\n    const jsonMatch = geminiResponse.match(/```json\\s*([\\s\\S]*?)\\s*```/) || \n                     geminiResponse.match(/\\{[\\s\\S]*\\}/);\n    \n    if (jsonMatch) {\n      extractedData = JSON.parse(jsonMatch[1] || jsonMatch[0]);\n    } else {\n      throw new Error('No valid JSON found in response');\n    }\n  } else {\n    extractedData = geminiResponse;\n  }\n  \n  // Validate and structure expense data\n  const validatedData = {\n    receiptNumber: extractedData.receiptNumber || null,\n    expenseDate: extractedData.expenseDate || null,\n    expenseAmount: extractedData.expenseAmount ? Number(extractedData.expenseAmount) : null,\n    currency: extractedData.currency || null,\n    expenseType: extractedData.expenseType || null,\n    description: extractedData.description || null,\n    \n    // Vendor information\n    vendorName: extractedData.vendorName || null,\n    vendorAddress: extractedData.vendorAddress || null,\n    vendorPhone: extractedData.vendorPhone || null,\n    vendorTaxId: extractedData.vendorTaxId || null,\n    \n    // Employee information\n    employeeName: extractedData.employeeName || null,\n    employeeId: extractedData.employeeId || null,\n    department: extractedData.department || null,\n    costCenter: extractedData.costCenter || null,\n    \n    // Business context\n    purpose: extractedData.purpose || null,\n    clientName: extractedData.clientName || null,\n    projectCode: extractedData.projectCode || null,\n    isClientReimbursable: extractedData.isClientReimbursable || null,\n    \n    // Tax information\n    taxAmount: extractedData.taxAmount ? Number(extractedData.taxAmount) : null,\n    taxRate: extractedData.taxRate ? Number(extractedData.taxRate) : null,\n    taxType: extractedData.taxType || null,\n    isTaxDeductible: extractedData.isTaxDeductible || null,\n    \n    // Travel details\n    travelDetails: {\n      origin: extractedData.travelDetails?.origin || null,\n      destination: extractedData.travelDetails?.destination || null,\n      distance: extractedData.travelDetails?.distance ? Number(extractedData.travelDetails.distance) : null,\n      transportMode: extractedData.travelDetails?.transportMode || null,\n      mileageRate: extractedData.travelDetails?.mileageRate ? Number(extractedData.travelDetails.mileageRate) : null\n    },\n    \n    // Meal details\n    mealDetails: {\n      attendees: extractedData.mealDetails?.attendees || null,\n      attendeeCount: extractedData.mealDetails?.attendeeCount ? Number(extractedData.mealDetails.attendeeCount) : null,\n      mealType: extractedData.mealDetails?.mealType || null,\n      isClientMeal: extractedData.mealDetails?.isClientMeal || null\n    },\n    \n    additionalDetails: extractedData.additionalDetails || {},\n    confidence: extractedData.confidence || 0.5\n  };\n  \n  // Add business rule validations\n  if (validatedData.expenseAmount && validatedData.taxAmount) {\n    const calculatedSubtotal = validatedData.expenseAmount - validatedData.taxAmount;\n    validatedData.additionalDetails.subtotal = calculatedSubtotal;\n  }\n  \n  // Auto-detect expense type if not provided\n  if (!validatedData.expenseType && validatedData.vendorName) {\n    const vendor = validatedData.vendorName.toLowerCase();\n    if (vendor.includes('restaurant') || vendor.includes('cafe') || vendor.includes('food')) {\n      validatedData.expenseType = 'meal';\n    } else if (vendor.includes('hotel') || vendor.includes('motel')) {\n      validatedData.expenseType = 'accommodation';\n    } else if (vendor.includes('gas') || vendor.includes('fuel') || vendor.includes('shell') || vendor.includes('exxon')) {\n      validatedData.expenseType = 'fuel';\n    } else if (vendor.includes('taxi') || vendor.includes('uber') || vendor.includes('lyft')) {\n      validatedData.expenseType = 'transport';\n    }\n  }\n  \n  return {\n    success: true,\n    extractedData: validatedData,\n    confidence: validatedData.confidence,\n    processedAt: new Date().toISOString(),\n    documentId: $('Webhook Trigger').first().json.body.documentId\n  };\n  \n} catch (error) {\n  return {\n    success: false,\n    error: `Expense data processing failed: ${error.message}`,\n    processedAt: new Date().toISOString(),\n    documentId: $('Webhook Trigger').first().json.body.documentId\n  };\n}"
+      },
+      "id": "expense-data-processor",
+      "name": "Expense Data Processor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submit-claim", 
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "expense-submission-webhook",
+      "name": "Expense Submission Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process final expense claim submission\nconst expenseData = $input.first().json.body;\n\n// Generate a unique expense claim ID\nconst claimId = `EXP-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;\n\n// Structure the final expense submission\nconst finalExpenseClaim = {\n  claimId: claimId,\n  submissionDate: new Date().toISOString(),\n  status: 'submitted',\n  claimType: 'expense',\n  documents: expenseData.documents || [],\n  extractedData: expenseData.extractedData || {},\n  userVerified: expenseData.userVerified || false,\n  processingNotes: {\n    submittedVia: 'web-portal',\n    aiProcessed: true,\n    documentsCount: (expenseData.documents || []).length,\n    averageConfidence: expenseData.extractedData?.confidence || 0,\n    expenseType: expenseData.extractedData?.expenseType || 'other',\n    totalAmount: expenseData.extractedData?.expenseAmount || 0,\n    currency: expenseData.extractedData?.currency || 'USD'\n  },\n  // Add expense-specific fields for easy reporting\n  summary: {\n    employeeName: expenseData.extractedData?.employeeName,\n    department: expenseData.extractedData?.department,\n    expenseType: expenseData.extractedData?.expenseType,\n    amount: expenseData.extractedData?.expenseAmount,\n    currency: expenseData.extractedData?.currency,\n    expenseDate: expenseData.extractedData?.expenseDate,\n    vendorName: expenseData.extractedData?.vendorName,\n    purpose: expenseData.extractedData?.purpose,\n    isClientReimbursable: expenseData.extractedData?.isClientReimbursable || false\n  }\n};\n\n// Add approval workflow logic\nlet approvalRequired = false;\nconst amount = expenseData.extractedData?.expenseAmount || 0;\n\n// Set approval thresholds\nif (amount > 500) {\n  approvalRequired = true;\n  finalExpenseClaim.status = 'pending_approval';\n  finalExpenseClaim.processingNotes.approvalReason = 'Amount exceeds $500 threshold';\n} else if (expenseData.extractedData?.expenseType === 'entertainment') {\n  approvalRequired = true;\n  finalExpenseClaim.status = 'pending_approval';\n  finalExpenseClaim.processingNotes.approvalReason = 'Entertainment expenses require approval';\n}\n\n// Log the submission (in production, this would go to your expense management system)\nconsole.log('New expense claim submitted:', finalExpenseClaim);\n\nreturn {\n  success: true,\n  claimId: claimId,\n  message: approvalRequired ? 'Expense claim submitted for approval' : 'Expense claim submitted successfully',\n  status: finalExpenseClaim.status,\n  approvalRequired: approvalRequired,\n  submittedAt: finalExpenseClaim.submissionDate,\n  summary: finalExpenseClaim.summary\n};"
+      },
+      "id": "expense-claim-processor",
+      "name": "Expense Claim Processor", 
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "expense-claim-response",
+      "name": "Expense Claim Response",
+      "type": "n8n-nodes-base.respondToWebhook", 
+      "typeVersion": 1,
+      "position": [680, 500]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Document Type Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Type Switch": {
+      "main": [
+        [
+          {
+            "node": "Gemini Expense Analysis",
+            "type": "main", 
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini Expense Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Expense Analysis": {
+      "main": [
+        [
+          {
+            "node": "Expense Data Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expense Data Processor": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expense Submission Webhook": {
+      "main": [
+        [
+          {
+            "node": "Expense Claim Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expense Claim Processor": {
+      "main": [
+        [
+          {
+            "node": "Expense Claim Response", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["expense", "receipt", "ai-processing"],
+  "triggerCount": 2,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
